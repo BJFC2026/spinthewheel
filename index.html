@@ -210,6 +210,21 @@
         // Admin functionality: Trigger a spin state in Firebase
         window.requestSpin = function() {
             if (isSpinning) return;
+
+            window.resetGame = function() {
+    if (confirm("Are you sure you want to reset the game? This will un-grey all slots.")) {
+        // Delete the used slots history from Firebase
+        set(ref(db, 'game/usedSlots'), null).then(() => {
+            // Reset the running state parameters
+            update(ref(db, 'game/state'), {
+                spinning: false,
+                targetRotation: 0,
+                winningSlot: 0
+            });
+            alert("Game has been reset! All 20 slots are now available.");
+        });
+    }
+}
             
             // Filter available unused slots
             let availableSlots = [];
