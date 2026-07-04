@@ -28,27 +28,43 @@
             margin-top: 20px;
         }
 
-        /* Wheel Canvas Styling */
-        .wheel-container {
-            position: relative;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
+     /* Modified Wheel Container to center everything cleanly */
+.wheel-container {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 450px; /* Limits the max size on large desktop screens */
+    margin: 0 auto;
+}
 
-        /* The Ticker/Pointer arrow */
-        .pointer {
-            position: absolute;
-            top: -15px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 0;
-            height: 0;
-            border-left: 20px solid transparent;
-            border-right: 20px solid transparent;
-            border-top: 30px solid #e74c3c;
-            z-index: 10;
-        }
+/* Responsive Canvas adjustments */
+canvas {
+    background: #2c3e50;
+    border-radius: 50%;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    border: 8px solid #34495e;
+    
+    /* These properties force the canvas to scale down on small screens */
+    width: 100% !important;
+    height: auto !important;
+    box-sizing: border-box;
+}
+
+/* The Ticker/Pointer arrow adjusted for scaling */
+.pointer {
+    position: absolute;
+    top: -15px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 20px solid transparent;
+    border-right: 20px solid transparent;
+    border-top: 30px solid #e74c3c;
+    z-index: 10;
+}
 
         canvas {
             background: #2c3e50;
