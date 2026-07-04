@@ -3,200 +3,368 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fundraiser Spin the Wheel</title>
+    <title>Firebase Live Spin Wheel</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; background: #f4f4f4; margin: 0; padding: 20px; }
-        h2 { color: #333; }
-        #wheel-container { position: relative; display: inline-block; margin-top: 20px; }
-        canvas { border: 5px solid #333; border-radius: 50%; background: #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
-        #pointer {
-            position: absolute; top: -15px; left: 50%; transform: translateX(-50%);
-            width: 0; height: 0; 
-            border-left: 15px solid transparent; border-right: 15px solid transparent;
-            border-top: 30px solid #dc3545; z-index: 10;
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1e1e24;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            margin: 0;
         }
-        button { margin-top: 25px; padding: 15px 30px; font-size: 20px; font-weight: bold; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        button:disabled { background: #ccc; cursor: not-allowed; box-shadow: none; }
-        #result { margin-top: 20px; font-size: 22px; font-weight: bold; color: #28a745; min-height: 30px; }
-        #status-ghost { font-size: 12px; color: #888; margin-top: 10px; }
+
+        h1 { margin-bottom: 10px; color: #f1c40f; }
+        
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 40px;
+            max-width: 1200px;
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        /* Wheel Canvas Styling */
+        .wheel-container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* The Ticker/Pointer arrow */
+        .pointer {
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 20px solid transparent;
+            border-right: 20px solid transparent;
+            border-top: 30px solid #e74c3c;
+            z-index: 10;
+        }
+
+        canvas {
+            background: #2c3e50;
+            border-radius: 50%;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 8px solid #34495e;
+        }
+
+        /* UI Panels */
+        .panel {
+            background: #2c3e50;
+            padding: 20px;
+            border-radius: 12px;
+            min-width: 300px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            flex: 1;
+        }
+
+        .admin-only { display: none; }
+        
+        button {
+            background: #e67e22;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: 0.2s;
+            margin-top: 15px;
+            width: 100%;
+        }
+        button:hover { background: #d35400; }
+        button:disabled { background: #7f8c8d; cursor: not-allowed; }
+
+        .prize-display {
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            margin: 20px 0;
+            padding: 15px;
+            background: #27ae60;
+            border-radius: 8px;
+            animation: pulse 2s infinite;
+            display: none;
+        }
+
+        .slot-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .slot-row label { width: 40px; font-weight: bold; }
+        .slot-row input {
+            flex: 1;
+            padding: 6px;
+            background: #34495e;
+            border: 1px solid #7f8c8d;
+            color: white;
+            border-radius: 4px;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.03); }
+            100% { transform: scale(1); }
+        }
     </style>
 </head>
 <body>
 
-    <h2>Match Day Grand Prize Wheel!</h2>
-    
-    <div id="wheel-container">
-        <div id="pointer"></div>
-        <canvas id="wheel" width="400" height="400"></canvas>
+    <h1>🔮 Live Spin the Wheel</h1>
+    <div id="status">Syncing game state...</div>
+
+    <div class="prize-display" id="prizeDisplay">🎉 Slot 5: Free Drink!</div>
+
+    <div class="container">
+        <div class="wheel-container">
+            <div class="pointer"></div>
+            <canvas id="canvas" width="450" height="450"></canvas>
+            
+            <div class="admin-only" id="spinControl">
+                <button id="spinBtn" onclick="requestSpin()">SPIN THE WHEEL</button>
+            </div>
+        </div>
+
+        <div class="panel admin-only" id="adminPanel">
+            <h3>🎁 Setup Slot Prizes (Admin Only)</h3>
+            <div id="slotsSetup"></div>
+            <button onclick="savePrizes()">Save & Sync All Prizes</button>
+        </div>
     </div>
-    
-    <br>
-    <button id="spin-btn" onclick="spinWheel()">SPIN THE WHEEL</button>
-    <div id="result"></div>
-    <div id="status-ghost" id="db-status">Setting up local wheel...</div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-        import { getFirestore, doc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-        // 1. PLACE YOUR REAL FIREBASE DETAILS HERE
+        // Your Firebase Configuration
         const firebaseConfig = {
             apiKey: "AIzaSyCT9aPHko4gLd8Ho11H-ZqhLceBCsH3I_8",
-  authDomain: "spin-the-wheel-dea67.firebaseapp.com",
-  databaseURL: "https://spin-the-wheel-dea67-default-rtdb.firebaseio.com",
-  projectId: "spin-the-wheel-dea67",
-  storageBucket: "spin-the-wheel-dea67.firebasestorage.app",
-  messagingSenderId: "339885622592",
-  appId: "1:339885622592:web:b366d3d59d14e67321a6a5",
-  measurementId: "G-WLKCECMVKN"
+            authDomain: "spin-the-wheel-dea67.firebaseapp.com",
+            databaseURL: "https://spin-the-wheel-dea67-default-rtdb.firebaseio.com",
+            projectId: "spin-the-wheel-dea67",
+            storageBucket: "spin-the-wheel-dea67.firebasestorage.app",
+            messagingSenderId: "339885622592",
+            appId: "1:339885622592:web:b366d3d59d14e67321a6a5",
+            measurementId: "G-WLKCECMVKN"
         };
 
-        // 2. Default fallback slots so the wheel draws NO MATTER WHAT
-        let slots = Array.from({length: 10}, (_, i) => ({
-            number: i + 1,
-            prize: "Prize " + (i + 1),
-            available: true
-        }));
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
 
-        const canvas = document.getElementById("wheel");
-        const ctx = canvas.getContext("2d");
+        // State variables
+        const numSlots = 20;
+        let prizes = {};
+        let usedSlots = [];
         let isSpinning = false;
+        let currentRotation = 0;
 
-        // Draw instantly with backup values so screen isn't blank
-        drawWheel();
+        // Check if user is admin via URL query: ?admin=true
+        const urlParams = new URLSearchParams(window.location.search);
+        const isAdmin = urlParams.get('admin') === 'true';
 
-        // 3. Try connecting to Firebase safely
-        try {
-            if (!firebaseConfig.apiKey.includes("YOUR_")) {
-                const app = initializeApp(firebaseConfig);
-                const db = getFirestore(app);
-                const docRef = doc(db, "wheelConfig", "prizes");
+        // UI Elements
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+        const prizeDisplay = document.getElementById("prizeDisplay");
+        const spinBtn = document.getElementById("spinBtn");
 
-                onSnapshot(docRef, (docSnap) => {
-                    if (docSnap.exists()) {
-                        slots = docSnap.data().slots;
-                        document.getElementById("db-status").innerText = "Connected to Live Prizes!";
-                        drawWheel();
-                    } else {
-                        document.getElementById("db-status").innerText = "Connected, but 'wheelConfig/prizes' document not found in Firestore.";
-                    }
-                }, (error) => {
-                    console.error("Firebase Snapshot Error:", error);
-                    document.getElementById("db-status").innerText = "Database permission error. Check Firestore Rules.";
-                });
-            } else {
-                document.getElementById("db-status").innerText = "Running in Demo Mode (Insert Firebase Keys to save progress live).";
+        // Setup Admin view if authenticated
+        if (isAdmin) {
+            document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'block');
+            setupAdminPanelUI();
+        }
+
+        // Dynamically build Admin Inputs
+        function setupAdminPanelUI() {
+            const container = document.getElementById("slotsSetup");
+            for (let i = 1; i <= numSlots; i++) {
+                container.innerHTML += `
+                    <div class="slot-row">
+                        <label>${i}:</label>
+                        <input type="text" id="prize-input-${i}" placeholder="Enter prize or forfeit">
+                    </div>`;
             }
-        } catch (e) {
-            console.error("Firebase setup failed:", e);
-            document.getElementById("db-status").innerText = "Firebase setup crashed. Check credentials.";
         }
 
-        function drawWheel() {
-            const numSegments = slots.length;
-            const arc = (2 * Math.PI) / numSegments;
-
-            // Clear previous drawings
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            slots.forEach((slot, i) => {
-                const angle = i * arc;
-                ctx.beginPath();
-                // Alternates green and yellow, greys out if won
-                ctx.fillStyle = slot.available ? (i % 2 === 0 ? "#28a745" : "#ffc107") : "#6c757d";
-                ctx.moveTo(200, 200);
-                ctx.arc(200, 200, 195, angle, angle + arc);
-                ctx.lineTo(200, 200);
-                ctx.fill();
-                ctx.lineWidth = 2;
-                ctx.strokeStyle = "#333";
-                ctx.stroke();
-
-                // Draw Section Number Text
-                ctx.save();
-                ctx.fillStyle = slot.available ? "#ffffff" : "#d1d1d1";
-                ctx.font = "bold 20px Arial";
-                ctx.translate(200, 200);
-                ctx.rotate(angle + arc / 2);
-                ctx.textAlign = "right";
-                ctx.fillText(slot.number, 160, 7);
-                ctx.restore();
-            });
+        // Admin functionality: Save Prizes to Firebase Realtime Database
+        window.savePrizes = function() {
+            let updatedPrizes = {};
+            for (let i = 1; i <= numSlots; i++) {
+                updatedPrizes[i] = document.getElementById(`prize-input-${i}`).value || `Slot ${i}`;
+            }
+            set(ref(db, 'game/prizes'), updatedPrizes).then(() => alert("Prizes saved and synchronized live!"));
         }
 
-        window.spinWheel = async function() {
+        // Admin functionality: Trigger a spin state in Firebase
+        window.requestSpin = function() {
             if (isSpinning) return;
             
-            const availableSlots = slots.filter(s => s.available);
-            if (availableSlots.length === 0) {
-                document.getElementById("result").innerText = "All prizes have been claimed!";
+            // Filter available unused slots
+            let availableSlots = [];
+            for(let i = 1; i <= numSlots; i++) {
+                if(!usedSlots.includes(i)) availableSlots.push(i);
+            }
+
+            if(availableSlots.length === 0) {
+                alert("All slots have been used! Reset the game in your Firebase dashboard.");
                 return;
             }
 
-            isSpinning = true;
-            document.getElementById("spin-btn").disabled = true;
-
-            const winningSlot = availableSlots[Math.floor(Math.random() * availableSlots.length)];
-            const winningIndex = slots.findIndex(s => s.number === winningSlot.number);
+            // Pick random target from available pool
+            let pickedSlot = availableSlots[Math.floor(Math.random() * availableSlots.length)];
             
-            const numSegments = slots.length;
-            const arc = 360 / numSegments;
+            // Calculate a random final degree that lands nicely on that slot
+            let slotDegrees = 360 / numSlots;
+            // Canvas rotation calculations (Target angle offsets standard index 0 from right side)
+            let targetAngle = 270 - ((pickedSlot - 0.5) * slotDegrees); 
+            if (targetAngle < 0) targetAngle += 360;
             
-            // Math to ensure the wheel visually matches the top arrow pointer pointer
-            const targetDegrees = 270 - (winningIndex * arc) - (arc / 2);
-            const extraSpins = 6 * 360; 
-            const totalRotation = extraSpins + targetDegrees;
+            // Add 5 full spins (1800 deg) for animation impact
+            let finalRotation = currentRotation + 1800 + targetAngle - (currentRotation % 360);
 
-            const duration = 5000; // 5 second clean spin
-            const startTime = performance.now();
+            // Push instruction to Firebase so everyone spins simultaneously
+            update(ref(db, 'game/state'), {
+                targetRotation: finalRotation,
+                winningSlot: pickedSlot,
+                spinning: true,
+                timestamp: Date.now()
+            });
+        }
 
-            function animate(now) {
-                const elapsed = now - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-                const easeOut = 1 - Math.pow(1 - progress, 4); // Smooth deceleration
-                
-                const frameRotation = totalRotation * easeOut;
-                canvas.style.transform = `rotate(${frameRotation}deg)`;
+        // LISTEN LIVE FOR DATA CHANGES (This runs on both Admin and Player screens)
+        onValue(ref(db, 'game'), (snapshot) => {
+            const data = snapshot.val();
+            if (!data) return;
 
-                if (progress < 1) {
-                    requestAnimationFrame(animate);
-                } else {
-                    document.getElementById("result").innerText = `🎉 Number ${winningSlot.number} Won: ${winningSlot.prize}!`;
-                    slots[winningIndex].available = false;
-                    drawWheel();
-                    
-                    // Try to save to Firebase if configuration exists
-                    if (!firebaseConfig.apiKey.includes("YOUR_")) {
-                        try {
-                            const db = getFirestore();
-                            const docRef = doc(db, "wheelConfig", "prizes");
-                            updateDoc(docRef, { slots: slots }).then(() => {
-                                finalizeSpin();
-                            }).catch(err => {
-                                console.error("Could not update cloud database:", err);
-                                finalizeSpin();
-                            });
-                        } catch(e) {
-                            finalizeSpin();
-                        }
-                    } else {
-                        finalizeSpin();
+            if (data.prizes) {
+                prizes = data.prizes;
+                // Populates fields for admin if they're empty
+                if (isAdmin) {
+                    for (let i = 1; i <= numSlots; i++) {
+                        if(prizes[i]) document.getElementById(`prize-input-${i}`).value = prizes[i];
                     }
                 }
             }
-            requestAnimationFrame(animate);
+
+            if (data.usedSlots) {
+                usedSlots = Object.values(data.usedSlots);
+            } else {
+                usedSlots = [];
+            }
+
+            if (data.state) {
+                document.getElementById("status").innerText = "Game Room Connected Live.";
+                
+                // If a spin command has been dispatched
+                if (data.state.spinning && !isSpinning) {
+                    animateWheel(data.state.targetRotation, data.state.winningSlot);
+                }
+            }
+            
+            drawWheel();
+        });
+
+        // Wheel rendering logic
+        function drawWheel() {
+            const radius = canvas.width / 2;
+            const sliceAngle = (2 * Math.PI) / numSlots;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            ctx.translate(radius, radius);
+            ctx.rotate((currentRotation * Math.PI) / 180);
+
+            for (let i = 0; i < numSlots; i++) {
+                let slotNum = i + 1;
+                let isUsed = usedSlots.includes(slotNum);
+
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, radius, i * sliceAngle, (i + 1) * sliceAngle);
+                ctx.closePath();
+
+                // Color alternates or greys out if used
+                if (isUsed) {
+                    ctx.fillStyle = (i % 2 === 0) ? "#555" : "#444"; // Greyed out
+                } else {
+                    ctx.fillStyle = (i % 2 === 0) ? "#9b59b6" : "#3498db"; // Vibrant Active Slots
+                }
+                ctx.fill();
+                ctx.stroke();
+
+                // Draw Text Number
+                ctx.save();
+                ctx.rotate(i * sliceAngle + sliceAngle / 2);
+                ctx.textAlign = "right";
+                ctx.fillStyle = isUsed ? "#777" : "#fff";
+                ctx.font = "bold 16px sans-serif";
+                ctx.fillText(slotNum, radius - 20, 5);
+                ctx.restore();
+            }
+            ctx.restore();
         }
 
-        function finalizeSpin() {
-            isSpinning = false;
-            const anyLeft = slots.some(s => s.available);
-            if (!anyLeft) {
-                document.getElementById("spin-btn").disabled = true;
-                document.getElementById("result").innerText = "All out of prizes! Check back next match.";
-            } else {
-                document.getElementById("spin-btn").disabled = false;
+        // Smooth CSS-like Animation loop for the Canvas
+        function animateWheel(targetRot, winningSlot) {
+            isSpinning = true;
+            spinBtn.disabled = true;
+            prizeDisplay.style.display = 'none';
+
+            let startRot = currentRotation;
+            let duration = 5000; // 5 Seconds spinning duration
+            let startTime = null;
+
+            function easeOutQuad(t, b, c, d) {
+                t /= d;
+                return -c * t * (t - 2) + b;
             }
+
+            function animationLoop(timestamp) {
+                if (!startTime) startTime = timestamp;
+                let elapsed = timestamp - startTime;
+
+                currentRotation = easeOutQuad(elapsed, startRot, targetRot - startRot, duration);
+                drawWheel();
+
+                if (elapsed < duration) {
+                    requestAnimationFrame(animationLoop);
+                } else {
+                    // Animation complete
+                    currentRotation = targetRot;
+                    isSpinning = false;
+                    drawWheel();
+
+                    // Display Result
+                    let prizeWon = prizes[winningSlot] || `Slot ${winningSlot}`;
+                    prizeDisplay.innerText = `🎰 Result: Slot ${winningSlot} -> ${prizeWon}`;
+                    prizeDisplay.style.display = 'block';
+
+                    // If Admin, log the finished slot into database permanently
+                    if (isAdmin) {
+                        spinBtn.disabled = false;
+                        // Add slot to used historical array in db
+                        update(ref(db, 'game/state'), { spinning: false });
+                        set(ref(db, `game/usedSlots/${winningSlot}`), winningSlot);
+                    }
+                }
+            }
+            requestAnimationFrame(animationLoop);
         }
+
+        // Initial draw
+        drawWheel();
     </script>
 </body>
 </html>
