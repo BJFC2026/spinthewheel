@@ -84,6 +84,12 @@
         }
         button:hover { background: #d35400; }
         button:disabled { background: #7f8c8d; cursor: not-allowed; }
+        
+        .reset-btn {
+            background: #e74c3c;
+            margin-top: 10px;
+        }
+        .reset-btn:hover { background: #c0392b; }
 
         .prize-display {
             font-size: 24px;
@@ -124,25 +130,30 @@
     <h1>🔮 Live Spin the Wheel</h1>
     <div id="status">Syncing game state...</div>
 
-    <div class="prize-display" id="prizeDisplay">🎉 Slot 5: Free Drink!</div>
+    <div class="prize-display" id="prizeDisplay"></div>
 
     <div class="container">
+        <!-- Wheel Area -->
         <div class="wheel-container">
             <div class="pointer"></div>
             <canvas id="canvas" width="450" height="450"></canvas>
             
+            <!-- Admin Spin Control -->
             <div class="admin-only" id="spinControl">
                 <button id="spinBtn" onclick="requestSpin()">SPIN THE WHEEL</button>
             </div>
         </div>
 
+        <!-- Admin Configuration Setup Panel -->
         <div class="panel admin-only" id="adminPanel">
             <h3>🎁 Setup Slot Prizes (Admin Only)</h3>
             <div id="slotsSetup"></div>
             <button onclick="savePrizes()">Save & Sync All Prizes</button>
+            <button class="reset-btn" onclick="resetGame()">🔴 Reset Game (Clear History)</button>
         </div>
     </div>
 
+    <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
@@ -207,24 +218,24 @@
             set(ref(db, 'game/prizes'), updatedPrizes).then(() => alert("Prizes saved and synchronized live!"));
         }
 
+        // Admin functionality: Reset the entire game state
+        window.resetGame = function() {
+            if (confirm("Are you sure you want to reset the game? This will un-grey all slots and clear results.")) {
+                set(ref(db, 'game/usedSlots'), null).then(() => {
+                    update(ref(db, 'game/state'), {
+                        spinning: false,
+                        targetRotation: 0,
+                        winningSlot: 0
+                    });
+                    prizeDisplay.style.display = 'none';
+                    alert("Game has been completely reset! All 20 slots are now active.");
+                });
+            }
+        }
+
         // Admin functionality: Trigger a spin state in Firebase
         window.requestSpin = function() {
             if (isSpinning) return;
-
-            window.resetGame = function() {
-    if (confirm("Are you sure you want to reset the game? This will un-grey all slots.")) {
-        // Delete the used slots history from Firebase
-        set(ref(db, 'game/usedSlots'), null).then(() => {
-            // Reset the running state parameters
-            update(ref(db, 'game/state'), {
-                spinning: false,
-                targetRotation: 0,
-                winningSlot: 0
-            });
-            alert("Game has been reset! All 20 slots are now available.");
-        });
-    }
-}
             
             // Filter available unused slots
             let availableSlots = [];
@@ -233,7 +244,7 @@
             }
 
             if(availableSlots.length === 0) {
-                alert("All slots have been used! Reset the game in your Firebase dashboard.");
+                alert("All slots have been used! Press the Reset button to restart the game.");
                 return;
             }
 
@@ -242,7 +253,6 @@
             
             // Calculate a random final degree that lands nicely on that slot
             let slotDegrees = 360 / numSlots;
-            // Canvas rotation calculations (Target angle offsets standard index 0 from right side)
             let targetAngle = 270 - ((pickedSlot - 0.5) * slotDegrees); 
             if (targetAngle < 0) targetAngle += 360;
             
@@ -265,10 +275,12 @@
 
             if (data.prizes) {
                 prizes = data.prizes;
-                // Populates fields for admin if they're empty
                 if (isAdmin) {
                     for (let i = 1; i <= numSlots; i++) {
-                        if(prizes[i]) document.getElementById(`prize-input-${i}`).value = prizes[i];
+                        // Prefill the admin text inputs if they match the DB state
+                        if(prizes[i] && !document.getElementById(`prize-input-${i}`).value) {
+                            document.getElementById(`prize-input-${i}`).value = prizes[i];
+                        }
                     }
                 }
             }
@@ -277,11 +289,20 @@
                 usedSlots = Object.values(data.usedSlots);
             } else {
                 usedSlots = [];
+                // Clear text output if game was reset
+                if (!data.state || data.state.winningSlot === 0) {
+                    prizeDisplay.style.display = 'none';
+                }
             }
 
             if (data.state) {
                 document.getElementById("status").innerText = "Game Room Connected Live.";
                 
+                // If a reset forced rotation to 0 outside of animation
+                if(!data.state.spinning && data.state.targetRotation === 0) {
+                    currentRotation = 0;
+                }
+
                 // If a spin command has been dispatched
                 if (data.state.spinning && !isSpinning) {
                     animateWheel(data.state.targetRotation, data.state.winningSlot);
@@ -312,9 +333,9 @@
 
                 // Color alternates or greys out if used
                 if (isUsed) {
-                    ctx.fillStyle = (i % 2 === 0) ? "#555" : "#444"; // Greyed out
+                    ctx.fillStyle = (i % 2 === 0) ? "#555" : "#444"; 
                 } else {
-                    ctx.fillStyle = (i % 2 === 0) ? "#9b59b6" : "#3498db"; // Vibrant Active Slots
+                    ctx.fillStyle = (i % 2 === 0) ? "#9b59b6" : "#3498db"; 
                 }
                 ctx.fill();
                 ctx.stroke();
@@ -331,10 +352,10 @@
             ctx.restore();
         }
 
-        // Smooth CSS-like Animation loop for the Canvas
+        // Smooth Animation loop for the Canvas
         function animateWheel(targetRot, winningSlot) {
             isSpinning = true;
-            spinBtn.disabled = true;
+            if(isAdmin) spinBtn.disabled = true;
             prizeDisplay.style.display = 'none';
 
             let startRot = currentRotation;
@@ -356,7 +377,6 @@
                 if (elapsed < duration) {
                     requestAnimationFrame(animationLoop);
                 } else {
-                    // Animation complete
                     currentRotation = targetRot;
                     isSpinning = false;
                     drawWheel();
@@ -366,10 +386,9 @@
                     prizeDisplay.innerText = `🎰 Result: Slot ${winningSlot} -> ${prizeWon}`;
                     prizeDisplay.style.display = 'block';
 
-                    // If Admin, log the finished slot into database permanently
+                    // Clean up execution flag via admin device
                     if (isAdmin) {
                         spinBtn.disabled = false;
-                        // Add slot to used historical array in db
                         update(ref(db, 'game/state'), { spinning: false });
                         set(ref(db, `game/usedSlots/${winningSlot}`), winningSlot);
                     }
