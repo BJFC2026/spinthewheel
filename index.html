@@ -28,49 +28,39 @@
             margin-top: 20px;
         }
 
-     /* Modified Wheel Container to center everything cleanly */
-.wheel-container {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    width: 100%;
-    max-width: 450px; /* Limits the max size on large desktop screens */
-    margin: 0 auto;
-}
+        /* Wheel Canvas Styling */
+        .wheel-container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 450px;
+            margin: 0 auto;
+        }
 
-/* Responsive Canvas adjustments */
-canvas {
-    background: #2c3e50;
-    border-radius: 50%;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-    border: 8px solid #34495e;
-    
-    /* These properties force the canvas to scale down on small screens */
-    width: 100% !important;
-    height: auto !important;
-    box-sizing: border-box;
-}
-
-/* The Ticker/Pointer arrow adjusted for scaling */
-.pointer {
-    position: absolute;
-    top: -15px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 0;
-    height: 0;
-    border-left: 20px solid transparent;
-    border-right: 20px solid transparent;
-    border-top: 30px solid #e74c3c;
-    z-index: 10;
-}
+        /* The Ticker/Pointer arrow */
+        .pointer {
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 20px solid transparent;
+            border-right: 20px solid transparent;
+            border-top: 30px solid #e74c3c;
+            z-index: 10;
+        }
 
         canvas {
             background: #2c3e50;
             border-radius: 50%;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             border: 8px solid #34495e;
+            width: 100% !important;
+            height: auto !important;
+            box-sizing: border-box;
         }
 
         /* UI Panels */
@@ -83,20 +73,22 @@ canvas {
             flex: 1;
         }
 
-        .admin-only { display: none; }
+        /* Visibility control classes */
+        .host-only, .admin-only { display: none; }
         
         button {
             background: #e67e22;
             color: white;
             border: none;
-            padding: 12px 30px;
-            font-size: 18px;
+            padding: 15px 30px;
+            font-size: 20px;
             font-weight: bold;
             border-radius: 25px;
             cursor: pointer;
             transition: 0.2s;
-            margin-top: 15px;
+            margin-top: 20px;
             width: 100%;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
         button:hover { background: #d35400; }
         button:disabled { background: #7f8c8d; cursor: not-allowed; }
@@ -104,6 +96,8 @@ canvas {
         .reset-btn {
             background: #e74c3c;
             margin-top: 10px;
+            font-size: 16px;
+            padding: 10px 20px;
         }
         .reset-btn:hover { background: #c0392b; }
 
@@ -117,6 +111,9 @@ canvas {
             border-radius: 8px;
             animation: pulse 2s infinite;
             display: none;
+            width: 100%;
+            max-width: 500px;
+            box-sizing: border-box;
         }
 
         .slot-row {
@@ -149,27 +146,23 @@ canvas {
     <div class="prize-display" id="prizeDisplay"></div>
 
     <div class="container">
-        <!-- Wheel Area -->
         <div class="wheel-container">
             <div class="pointer"></div>
             <canvas id="canvas" width="450" height="450"></canvas>
             
-            <!-- Admin Spin Control -->
-            <div class="admin-only" id="spinControl">
-                <button id="spinBtn" onclick="requestSpin()">SPIN THE WHEEL</button>
+            <div class="host-only" id="spinControl">
+                <button id="spinBtn" onclick="requestSpin()">🎰 SPIN THE WHEEL 🎰</button>
             </div>
         </div>
 
-        <!-- Admin Configuration Setup Panel -->
         <div class="panel admin-only" id="adminPanel">
-            <h3>🎁 Setup Slot Prizes (Admin Only)</h3>
+            <h3>🎁 Master Setup Panel</h3>
             <div id="slotsSetup"></div>
-            <button onclick="savePrizes()">Save & Sync All Prizes</button>
+            <button onclick="savePrizes()" style="font-size:16px; padding:10px;">💾 Save & Sync All Prizes</button>
             <button class="reset-btn" onclick="resetGame()">🔴 Reset Game (Clear History)</button>
         </div>
     </div>
 
-    <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
@@ -197,9 +190,12 @@ canvas {
         let isSpinning = false;
         let currentRotation = 0;
 
-        // Check if user is admin via URL query: ?admin=true
+        // Parse routing views from URL parameters (?view=admin or ?view=host)
         const urlParams = new URLSearchParams(window.location.search);
-        const isAdmin = urlParams.get('admin') === 'true';
+        const currentView = urlParams.get('view'); 
+        
+        const isAdmin = (currentView === 'admin');
+        const isHost = (currentView === 'host' || currentView === 'admin'); // Admin automatically gets host controls too
 
         // UI Elements
         const canvas = document.getElementById("canvas");
@@ -207,7 +203,10 @@ canvas {
         const prizeDisplay = document.getElementById("prizeDisplay");
         const spinBtn = document.getElementById("spinBtn");
 
-        // Setup Admin view if authenticated
+        // Dynamically toggle views based on URLs
+        if (isHost) {
+            document.querySelectorAll('.host-only').forEach(el => el.style.display = 'block');
+        }
         if (isAdmin) {
             document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'block');
             setupAdminPanelUI();
@@ -249,7 +248,7 @@ canvas {
             }
         }
 
-        // Admin functionality: Trigger a spin state in Firebase
+        // Host / Admin functionality: Trigger a spin state in Firebase
         window.requestSpin = function() {
             if (isSpinning) return;
             
@@ -260,7 +259,7 @@ canvas {
             }
 
             if(availableSlots.length === 0) {
-                alert("All slots have been used! Press the Reset button to restart the game.");
+                alert("All slots have been used! Tell the admin to reset the game.");
                 return;
             }
 
@@ -284,7 +283,7 @@ canvas {
             });
         }
 
-        // LISTEN LIVE FOR DATA CHANGES (This runs on both Admin and Player screens)
+        // LISTEN LIVE FOR DATA CHANGES (This runs across all views synchronously)
         onValue(ref(db, 'game'), (snapshot) => {
             const data = snapshot.val();
             if (!data) return;
@@ -293,7 +292,6 @@ canvas {
                 prizes = data.prizes;
                 if (isAdmin) {
                     for (let i = 1; i <= numSlots; i++) {
-                        // Prefill the admin text inputs if they match the DB state
                         if(prizes[i] && !document.getElementById(`prize-input-${i}`).value) {
                             document.getElementById(`prize-input-${i}`).value = prizes[i];
                         }
@@ -305,21 +303,18 @@ canvas {
                 usedSlots = Object.values(data.usedSlots);
             } else {
                 usedSlots = [];
-                // Clear text output if game was reset
                 if (!data.state || data.state.winningSlot === 0) {
                     prizeDisplay.style.display = 'none';
                 }
             }
 
             if (data.state) {
-                document.getElementById("status").innerText = "Game Room Connected Live.";
+                document.getElementById("status").innerText = "Game Connected Live.";
                 
-                // If a reset forced rotation to 0 outside of animation
                 if(!data.state.spinning && data.state.targetRotation === 0) {
                     currentRotation = 0;
                 }
 
-                // If a spin command has been dispatched
                 if (data.state.spinning && !isSpinning) {
                     animateWheel(data.state.targetRotation, data.state.winningSlot);
                 }
@@ -347,7 +342,6 @@ canvas {
                 ctx.arc(0, 0, radius, i * sliceAngle, (i + 1) * sliceAngle);
                 ctx.closePath();
 
-                // Color alternates or greys out if used
                 if (isUsed) {
                     ctx.fillStyle = (i % 2 === 0) ? "#555" : "#444"; 
                 } else {
@@ -356,7 +350,6 @@ canvas {
                 ctx.fill();
                 ctx.stroke();
 
-                // Draw Text Number
                 ctx.save();
                 ctx.rotate(i * sliceAngle + sliceAngle / 2);
                 ctx.textAlign = "right";
@@ -371,11 +364,11 @@ canvas {
         // Smooth Animation loop for the Canvas
         function animateWheel(targetRot, winningSlot) {
             isSpinning = true;
-            if(isAdmin) spinBtn.disabled = true;
+            if(isHost) spinBtn.disabled = true;
             prizeDisplay.style.display = 'none';
 
             let startRot = currentRotation;
-            let duration = 5000; // 5 Seconds spinning duration
+            let duration = 5000; 
             let startTime = null;
 
             function easeOutQuad(t, b, c, d) {
@@ -397,13 +390,18 @@ canvas {
                     isSpinning = false;
                     drawWheel();
 
-                    // Display Result
+                    // Display Result everywhere
                     let prizeWon = prizes[winningSlot] || `Slot ${winningSlot}`;
                     prizeDisplay.innerText = `🎰 Result: Slot ${winningSlot} -> ${prizeWon}`;
                     prizeDisplay.style.display = 'block';
 
-                    // Clean up execution flag via admin device
-                    if (isAdmin) {
+                    // Only the primary device that initiated the state updates the used slots historical array
+                    if (isHost && !isAdmin) {
+                        // If it's just the pass-around device, enable button and let it notify database
+                        spinBtn.disabled = false;
+                        update(ref(db, 'game/state'), { spinning: false });
+                        set(ref(db, `game/usedSlots/${winningSlot}`), winningSlot);
+                    } else if (isAdmin) {
                         spinBtn.disabled = false;
                         update(ref(db, 'game/state'), { spinning: false });
                         set(ref(db, `game/usedSlots/${winningSlot}`), winningSlot);
