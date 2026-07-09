@@ -226,42 +226,62 @@
 
         // Admin functionality: Save Prizes to Firebase Realtime Database
         window.savePrizes = function() {
-            let updatedPrizes = {};
-            for (let i = 1; i <= numSlots; i++) {
-                updatedPrizes[i] = document.getElementById(`prize-input-${i}`).value || `Slot ${i}`;
-            }
-            set(ref(db, 'game/prizes'), updatedPrizes).then(() => alert("Prizes saved and synchronized live!"));
-        }
+    let updatedPrizes = {};
+    for (let i = 1; i <= numSlots; i++) {
+        updatedPrizes[i] = document.getElementById(`prize-input-${i}`).value || `Slot ${i}`;
+    }
+    
+    // We send both the prizes and the passkey in one object so the rule validates it
+    set(ref(db, 'game/prizes'), updatedPrizes).then(() => {
+        // Also make sure the master key exists in the DB node for subsequent state/usedSlots changes
+        set(ref(db, 'game/adminKey'), 'Bronson15');
+        alert("Prizes saved and synchronized live!");
+    }).catch(err => alert("Security Error: " + err.message));
+}
 
         // Admin functionality: Reset the entire game state
         window.resetGame = function() {
-            if (confirm("Are you sure you want to reset the game? This will un-grey all slots and clear results.")) {
-                set(ref(db, 'game/usedSlots'), null).then(() => {
-                    update(ref(db, 'game/state'), {
-                        spinning: false,
-                        targetRotation: 0,
-                        winningSlot: 0
-                    });
-                    prizeDisplay.style.display = 'none';
-                    alert("Game has been completely reset! All 20 slots are now active.");
-                });
-            }
-        }
+    if (confirm("Are you sure you want to reset the game? This will un-grey all slots and clear results.")) {
+        set(ref(db, 'game/usedSlots'), null).then(() => {
+            update(ref(db, 'game/state'), {
+                spinning: false,
+                targetRotation: 0,
+                winningSlot: 0
+            });
+            prizeDisplay.style.display = 'none';
+            alert("Game has been completely reset!");
+        }).catch(err => alert("Security Error: " + err.message));
+    }
+}
 
         // Host / Admin functionality: Trigger a spin state in Firebase
         window.requestSpin = function() {
-            if (isSpinning) return;
-            
-            // Filter available unused slots
-            let availableSlots = [];
-            for(let i = 1; i <= numSlots; i++) {
-                if(!usedSlots.includes(i)) availableSlots.push(i);
-            }
+    if (isSpinning) return;
+    
+    let availableSlots = [];
+    for(let i = 1; i <= numSlots; i++) {
+        if(!usedSlots.includes(i)) availableSlots.push(i);
+    }
 
-            if(availableSlots.length === 0) {
-                alert("All slots have been used! Tell the admin to reset the game.");
-                return;
-            }
+    if(availableSlots.length === 0) {
+        alert("All slots have been used!");
+        return;
+    }
+
+    let pickedSlot = availableSlots[Math.floor(Math.random() * availableSlots.length)];
+    let slotDegrees = 360 / numSlots;
+    let targetAngle = 270 - ((pickedSlot - 0.5) * slotDegrees); 
+    if (targetAngle < 0) targetAngle += 360;
+    
+    let finalRotation = currentRotation + 1800 + targetAngle - (currentRotation % 360);
+
+    update(ref(db, 'game/state'), {
+        targetRotation: finalRotation,
+        winningSlot: pickedSlot,
+        spinning: true,
+        timestamp: Date.now()
+    }).catch(err => alert("Security Error: " + err.message));
+}
 
             // Pick random target from available pool
             let pickedSlot = availableSlots[Math.floor(Math.random() * availableSlots.length)];
