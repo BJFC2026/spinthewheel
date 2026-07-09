@@ -205,16 +205,19 @@
 
         // Dynamically toggle views based on URLs
         if (isHost) {
-            document.querySelectorAll('.host-only').forEach(el => el.style.display = 'block');
+            const spinEl = document.getElementById('spinControl');
+            if (spinEl) spinEl.style.display = 'block';
         }
         if (isAdmin) {
-            document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'block');
+            const adminEl = document.getElementById('adminPanel');
+            if (adminEl) adminEl.style.display = 'block';
             setupAdminPanelUI();
         }
 
         // Dynamically build Admin Inputs
         function setupAdminPanelUI() {
             const container = document.getElementById("slotsSetup");
+            container.innerHTML = ""; // Clear out to avoid duplicates
             for (let i = 1; i <= numSlots; i++) {
                 container.innerHTML += `
                     <div class="slot-row">
@@ -226,81 +229,59 @@
 
         // Admin functionality: Save Prizes to Firebase Realtime Database
         window.savePrizes = function() {
-    let updatedPrizes = {};
-    for (let i = 1; i <= numSlots; i++) {
-        updatedPrizes[i] = document.getElementById(`prize-input-${i}`).value || `Slot ${i}`;
-    }
-    
-    // We send both the prizes and the passkey in one object so the rule validates it
-    set(ref(db, 'game/prizes'), updatedPrizes).then(() => {
-        // Also make sure the master key exists in the DB node for subsequent state/usedSlots changes
-        set(ref(db, 'game/adminKey'), 'Bronson15');
-        alert("Prizes saved and synchronized live!");
-    }).catch(err => alert("Security Error: " + err.message));
-}
+            let updatedPrizes = {};
+            for (let i = 1; i <= numSlots; i++) {
+                updatedPrizes[i] = document.getElementById(`prize-input-${i}`).value || `Slot ${i}`;
+            }
+            
+            set(ref(db, 'game/prizes'), updatedPrizes).then(() => {
+                set(ref(db, 'game/adminKey'), 'Bronson15');
+                alert("Prizes saved and synchronized live!");
+            }).catch(err => alert("Security Error: " + err.message));
+        }
 
         // Admin functionality: Reset the entire game state
         window.resetGame = function() {
-    if (confirm("Are you sure you want to reset the game? This will un-grey all slots and clear results.")) {
-        set(ref(db, 'game/usedSlots'), null).then(() => {
-            update(ref(db, 'game/state'), {
-                spinning: false,
-                targetRotation: 0,
-                winningSlot: 0
-            });
-            prizeDisplay.style.display = 'none';
-            alert("Game has been completely reset!");
-        }).catch(err => alert("Security Error: " + err.message));
-    }
-}
+            if (confirm("Are you sure you want to reset the game? This will un-grey all slots and clear results.")) {
+                set(ref(db, 'game/usedSlots'), null).then(() => {
+                    update(ref(db, 'game/state'), {
+                        spinning: false,
+                        targetRotation: 0,
+                        winningSlot: 0
+                    });
+                    prizeDisplay.style.display = 'none';
+                    alert("Game has been completely reset!");
+                }).catch(err => alert("Security Error: " + err.message));
+            }
+        }
 
         // Host / Admin functionality: Trigger a spin state in Firebase
         window.requestSpin = function() {
-    if (isSpinning) return;
-    
-    let availableSlots = [];
-    for(let i = 1; i <= numSlots; i++) {
-        if(!usedSlots.includes(i)) availableSlots.push(i);
-    }
-
-    if(availableSlots.length === 0) {
-        alert("All slots have been used!");
-        return;
-    }
-
-    let pickedSlot = availableSlots[Math.floor(Math.random() * availableSlots.length)];
-    let slotDegrees = 360 / numSlots;
-    let targetAngle = 270 - ((pickedSlot - 0.5) * slotDegrees); 
-    if (targetAngle < 0) targetAngle += 360;
-    
-    let finalRotation = currentRotation + 1800 + targetAngle - (currentRotation % 360);
-
-    update(ref(db, 'game/state'), {
-        targetRotation: finalRotation,
-        winningSlot: pickedSlot,
-        spinning: true,
-        timestamp: Date.now()
-    }).catch(err => alert("Security Error: " + err.message));
-}
-
-            // Pick random target from available pool
-            let pickedSlot = availableSlots[Math.floor(Math.random() * availableSlots.length)];
+            if (isSpinning) return;
             
-            // Calculate a random final degree that lands nicely on that slot
+            let availableSlots = [];
+            for(let i = 1; i <= numSlots; i++) {
+                if(!usedSlots.includes(i)) availableSlots.push(i);
+            }
+
+            if(availableSlots.length === 0) {
+                alert("All slots have been used!");
+                return;
+            }
+
+            let pickedSlot = availableSlots[Math.floor(Math.random() * availableSlots.length)];
             let slotDegrees = 360 / numSlots;
             let targetAngle = 270 - ((pickedSlot - 0.5) * slotDegrees); 
             if (targetAngle < 0) targetAngle += 360;
             
-            // Add 5 full spins (1800 deg) for animation impact
             let finalRotation = currentRotation + 1800 + targetAngle - (currentRotation % 360);
 
-            // Push instruction to Firebase so everyone spins simultaneously
             update(ref(db, 'game/state'), {
                 targetRotation: finalRotation,
                 winningSlot: pickedSlot,
                 spinning: true,
                 timestamp: Date.now()
-            });
+            }).catch(err => alert("Security Error: " + err.message));
         }
 
         // LISTEN LIVE FOR DATA CHANGES (This runs across all views synchronously)
@@ -312,8 +293,9 @@
                 prizes = data.prizes;
                 if (isAdmin) {
                     for (let i = 1; i <= numSlots; i++) {
-                        if(prizes[i] && !document.getElementById(`prize-input-${i}`).value) {
-                            document.getElementById(`prize-input-${i}`).value = prizes[i];
+                        const inputField = document.getElementById(`prize-input-${i}`);
+                        if(prizes[i] && inputField && !inputField.value) {
+                            inputField.value = prizes[i];
                         }
                     }
                 }
@@ -384,7 +366,7 @@
         // Smooth Animation loop for the Canvas
         function animateWheel(targetRot, winningSlot) {
             isSpinning = true;
-            if(isHost) spinBtn.disabled = true;
+            if(isHost && spinBtn) spinBtn.disabled = true;
             prizeDisplay.style.display = 'none';
 
             let startRot = currentRotation;
@@ -415,14 +397,10 @@
                     prizeDisplay.innerText = `🎰 Result: Slot ${winningSlot} -> ${prizeWon}`;
                     prizeDisplay.style.display = 'block';
 
-                    // Only the primary device that initiated the state updates the used slots historical array
-                    if (isHost && !isAdmin) {
-                        // If it's just the pass-around device, enable button and let it notify database
+                    if (isHost && spinBtn) {
                         spinBtn.disabled = false;
-                        update(ref(db, 'game/state'), { spinning: false });
-                        set(ref(db, `game/usedSlots/${winningSlot}`), winningSlot);
-                    } else if (isAdmin) {
-                        spinBtn.disabled = false;
+                    }
+                    if (isAdmin || (isHost && !isAdmin)) {
                         update(ref(db, 'game/state'), { spinning: false });
                         set(ref(db, `game/usedSlots/${winningSlot}`), winningSlot);
                     }
